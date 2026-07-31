@@ -16,6 +16,11 @@ ENV PYTHONUNBUFFERED=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=true \
     POETRY_VIRTUALENVS_CREATE=true
 
+# Install build-essential for compiling C extensions (e.g., uvloop)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN pip install "poetry==${POETRY_VERSION}"
 
 WORKDIR /app
