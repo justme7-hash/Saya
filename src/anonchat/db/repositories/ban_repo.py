@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from anonchat.db.repositories.base import BaseRepository
@@ -30,8 +30,10 @@ class BanRepository(BaseRepository[Ban]):
         result = await self.session.execute(stmt)
         ban = result.scalar_one_or_none()
         if ban is not None and ban.is_expired:
+            # اگر بن منقضی است، آن را غیرفعال و commit کنیم تا همه تراکنش‌ها وضعیت را ببینند
             ban.is_active = False
             await self.session.flush()
+            await self.session.commit()
             return None
         return ban
 
@@ -49,9 +51,10 @@ class BanRepository(BaseRepository[Ban]):
         result = await self.session.execute(stmt)
         ban = result.scalar_one_or_none()
         if ban is not None and ban.is_expired:
-            # بن منقضی — غیرفعال کن
+            # بن منقضی — غیرفعال کن و commit تا خواننده‌های بعدی آن را نبینند
             ban.is_active = False
             await self.session.flush()
+            await self.session.commit()
             return None
         return ban
 
@@ -96,6 +99,7 @@ class BanRepository(BaseRepository[Ban]):
         ban.unbanned_by = unbanned_by
         ban.unbanned_at = datetime.now(UTC)
         await self.session.flush()
+        await self.session.commit()
         return True
 
     async def get_user_bans(self, user_id: int) -> list[Ban]:
@@ -122,4 +126,5 @@ class BanRepository(BaseRepository[Ban]):
                 count += 1
         if count:
             await self.session.flush()
+            await self.session.commit()
         return count
