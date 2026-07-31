@@ -1,0 +1,52 @@
+# =============================================================================
+#  Docker Compose — محیط توسعه‌ی محلی ربات سایه
+# =============================================================================
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: saya-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${HEALTH_PORT:-8080}:${HEALTH_PORT:-8080}"
+    volumes:
+      # ماندگاری پایگاه داده SQLite
+      - ./data:/app/data
+      # برای توسعه: کد را مونت کن
+      - ./src:/app/src:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - saya-net
+
+  # دیتابیس PostgreSQL برای تست محلی (اختیاری)
+  # در پروداکشن Railway از دیتابیس مدیریت‌شده استفاده کنید
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: saya-db
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: saya
+  #     POSTGRES_PASSWORD: saya_secret
+  #     POSTGRES_DB: saya
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - saya-pgdata:/var/lib/postgresql/data
+  #   networks:
+  #     - saya-net
+
+networks:
+  saya-net:
+    driver: bridge
+
+# volumes:
+#   saya-pgdata:

@@ -1,0 +1,120 @@
+[tool.poetry]
+name = "anonchat"
+version = "1.0.0"
+description = "سایه (Saya) — ربات حرفه‌ای هیدن‌چت ناشناس تلگرام با معماری تمیز، امن و مقیاس‌پذیر"
+authors = ["Saya Team <dev@saya-bot.ir>"]
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "anonchat", from = "src" }]
+repository = "https://github.com/saya-bot/anonchat"
+keywords = ["telegram", "bot", "anonymous-chat", "aiogram", "aiogram3"]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+aiogram = "^3.13.1"
+sqlalchemy = { extras = ["asyncio"], version = "^2.0.35" }
+aiosqlite = "^0.20.0"
+alembic = "^1.13.3"
+pydantic = "^2.9.2"
+pydantic-settings = "^2.5.2"
+python-dotenv = "^1.0.1"
+structlog = "^24.4.0"
+rich = "^13.9.2"
+cachetools = "^5.5.0"
+apscheduler = "^3.10.4"
+python-dateutil = "^2.9.0"
+emoji = "^2.14.0"
+uvloop = { version = "^0.20.0", markers = "sys_platform != 'win32'" }
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.7.1"
+black = "^24.10.0"
+pytest = "^8.3.3"
+pytest-asyncio = "^0.24.0"
+pytest-cov = "^5.0.0"
+anyio = "^4.6.0"
+aresponses = "^3.0.0"
+
+[tool.poetry.scripts]
+saya = "anonchat.main:main"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
+
+# ---------------------------------------------------------------------------
+# Ruff — لینتر و فرمت‌کننده سریع
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "RUF", # ruff-specific
+    "S",   # bandit (security)
+    "A",   # flake8-builtins
+    "DTZ", # flake8-datetimez
+    "PT",  # flake8-pytest-style
+    "PL",  # pylint
+]
+ignore = [
+    "E501",   # line length handled by black
+    "S101",   # assert usage in tests
+    "S104",   # binding to all interfaces (0.0.0.0) in container
+    "S108",   # tmp file usage
+    "PLR0913", # too many arguments (acceptable in DI-heavy code)
+    "B008",   # function call in default argument (common in DI)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "PLR2004"]
+"alembic/**" = ["S", "N"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["anonchat"]
+
+# ---------------------------------------------------------------------------
+# Black — فرمت‌کننده کد
+# ---------------------------------------------------------------------------
+[tool.black]
+target-version = ["py312"]
+line-length = 100
+skip-string-normalization = false
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=anonchat",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+markers = [
+    "unit: unit tests",
+    "integration: integration tests",
+    "slow: slow tests",
+]
