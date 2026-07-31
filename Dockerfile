@@ -5,7 +5,7 @@
 # =============================================================================
 
 # --- مرحله 1: builder ---------------------------------------------------------
-FROM python:3.13-slim AS builder
+FROM python:3.12-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -34,7 +34,7 @@ COPY poetry.lock* ./
 RUN poetry install --no-root --without dev --no-interaction
 
 # --- مرحله 2: runtime ---------------------------------------------------------
-FROM python:3.13-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
