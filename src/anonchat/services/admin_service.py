@@ -7,9 +7,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
+from sqlalchemy import func
 
 from anonchat.core.exceptions import AdminPermissionError, UserNotFoundError
 from anonchat.core.logging import get_logger
@@ -61,7 +64,16 @@ class AdminService:
         async with self._container.session() as session:
             user_repo = self._container.user_repo_with(session)
 
-            total = len(list(await user_repo.get_many(filters={})))
+            # استفاده از COUNT در DB به جای بارگذاری تمام رکوردها
+            count_stmt = select(func.count()).select_from(User).where(User.is_registered.is_(True))
+            if search:
+                count_stmt = count_stmt.where(
+                    or_(
+                        User.nickname.ilike(f"%{search}%"),
+                        User.telegram_id == int(search) if search.isdigit() else False,
+                    )
+                )
+            total = int((await session.execute(count_stmt)).scalar_one())
 
             stmt = select(User).where(User.is_registered.is_(True))
             if search:
@@ -182,27 +194,48 @@ class AdminService:
         if dto.target == "online":
             stmt = stmt.where(User.is_online.is_(True))
 
-        # باگ: قبلاً User instances خارج از session دسترسی می‌شدند که می‌توانست
-        # باعث DetachedInstanceError شود. حالا telegram_idها داخل session استخراج می‌شوند.
+        # دریافت telegram_idها داخل session
         async with self._container.session() as session:
             result = await session.execute(stmt)
             telegram_ids = [u.telegram_id for u in result.scalars().all()]
 
         sent = 0
         failed = 0
+        # پارامترهای نرخ‌دهی
+        delay_between_msgs = 0.05  # حدود 20 پیام در ثانیه
+        max_retries = 1
+
         for telegram_id in telegram_ids:
+            retry = 0
+            while True:
+                try:
+                    await bot.send_message(
+                        telegram_id, dto.message, parse_mode=dto.parse_mode
+                    )
+                    sent += 1
+                    break
+                except Exception as exc:
+                    # شناسایی FloodWait-like با بررسی timeout attribute
+                    timeout = getattr(exc, "timeout", None)
+                    if timeout and retry < max_retries:
+                        self._log.warning(
+                            "broadcast.floodwait", telegram_id=telegram_id, timeout=timeout, retry=retry
+                        )
+                        await asyncio.sleep(timeout)
+                        retry += 1
+                        continue
+                    failed += 1
+                    self._log.exception(
+                        "broadcast.failed",
+                        telegram_id=telegram_id,
+                        error=str(exc),
+                    )
+                    break
+            # کمی تأخیر برای جلوگیری از نرخ بالای ارسال
             try:
-                await bot.send_message(
-                    telegram_id, dto.message, parse_mode=dto.parse_mode
-                )
-                sent += 1
-            except Exception as exc:
-                failed += 1
-                self._log.debug(
-                    "broadcast.failed",
-                    telegram_id=telegram_id,
-                    error=str(exc),
-                )
+                await asyncio.sleep(delay_between_msgs)
+            except Exception:
+                pass
 
         await self._log_audit(
             admin_telegram_id,
@@ -255,7 +288,8 @@ class AdminService:
         try:
             stats = await self.get_stats_overview()
             _ = stats
-        except Exception:
+        except Exception as exc:
+            self._log.exception("health.check_failed", error=str(exc))
             db_ok = False
 
         return SystemHealthDTO(
