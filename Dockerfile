@@ -41,9 +41,9 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app/src"
 
-# نصب ca-certificates برای اتصال HTTPS به تلگرام
+# نصب ca-certificates برای اتصال HTTPS به تلگرام و gosu برای تعویض کاربر در entrypoint
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl && \
+    apt-get install -y --no-install-recommends ca-certificates curl gosu && \
     rm -rf /var/lib/apt/lists/*
 
 # ایجاد کاربر غیرروت برای امنیت
@@ -63,12 +63,19 @@ COPY --chown=saya:saya pyproject.toml /app/
 # ایجاد پوشه‌ی داده
 RUN mkdir -p /app/data && chown saya:saya /app/data
 
-USER saya
+# کپی entrypoint که در زمان اجرا مالکیت/دسترسی /app/data را (حتی اگر توسط
+# یک volume mount خالی و با مالکیت root بازنویسی شده باشد) تضمین می‌کند
+COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
+# توجه: با وجود entrypoint، کانتینر ابتدا با root شروع می‌شود تا مجوزهای
+# /app/data تصحیح شود و سپس با gosu به کاربر saya سوییچ می‌کند
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:${HEALTH_PORT:-8080}/health || exit 1
+
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 # اجرای ربات
 CMD ["python", "-m", "anonchat.main"]
