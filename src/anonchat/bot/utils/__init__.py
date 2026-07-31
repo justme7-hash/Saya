@@ -8,8 +8,13 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from anonchat.core.logging import get_logger
+
 if TYPE_CHECKING:
     from anonchat.core.container import Container
+
+
+_logger = get_logger("bot.utils")
 
 
 def _is_not_modified_error(exc: Exception) -> bool:
@@ -44,15 +49,15 @@ async def safe_edit_text(
             await callback.message.answer(  # type: ignore[attr-defined]
                 text, reply_markup=reply_markup, parse_mode=parse_mode
             )
-        except Exception:
-            pass
-    except Exception:
+        except Exception as exc2:
+            _logger.exception("safe_edit_text.answer_failed", error=str(exc2))
+    except Exception as exc:
         try:
             await callback.message.answer(  # type: ignore[attr-defined]
                 text, reply_markup=reply_markup, parse_mode=parse_mode
             )
-        except Exception:
-            pass
+        except Exception as exc2:
+            _logger.exception("safe_edit_text.fallback_failed", error=str(exc2))
 
 
 async def safe_edit_reply_markup(
@@ -71,8 +76,9 @@ async def safe_edit_reply_markup(
     except TelegramBadRequest as exc:
         if _is_not_modified_error(exc):
             return
-    except Exception:
-        pass
+        _logger.exception("safe_edit_reply_markup.telegram_bad_request", error=str(exc))
+    except Exception as exc:
+        _logger.exception("safe_edit_reply_markup.failed", error=str(exc))
 
 
 async def safe_answer(
@@ -83,8 +89,8 @@ async def safe_answer(
     """پاسخ امن به callback — خطاها را نگه می‌دارد."""
     try:
         await callback.answer(text, show_alert=show_alert)
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.exception("safe_answer.failed", error=str(exc))
 
 
 async def reset_user_state(
@@ -109,15 +115,19 @@ async def reset_user_state(
             user_repo = container.user_repo_with(session)
             db_user = await user_repo.get_by_telegram_id(telegram_id)
             is_searching = bool(db_user and db_user.is_searching)
-    except Exception:
+    except Exception as exc:
+        _logger.exception("reset_user_state.check_search_failed", error=str(exc))
         is_searching = False
 
     # اگر در حال جستجو است، لغو کن
     if is_searching:
         try:
             await container.matchmaking_service.cancel_search(telegram_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.exception("reset_user_state.cancel_search_failed", error=str(exc))
 
     # state را پاک کن
-    await state.clear()
+    try:
+        await state.clear()
+    except Exception as exc:
+        _logger.exception("reset_user_state.clear_state_failed", error=str(exc))
