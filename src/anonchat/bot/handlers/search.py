@@ -30,12 +30,22 @@ _log = get_logger("handler.search")
 async def start_search(message: Message, state: FSMContext) -> None:
     """شروع جستجوی مخاطب — نمایش معیارها."""
     container = get_container()
-    async with container.session() as session:
-        user_repo = container.user_repo_with(session)
-        db_user = await user_repo.get_by_telegram_id(message.from_user.id)
-        locale = getattr(db_user, "language", None) or "fa"
-        is_registered = bool(db_user and db_user.is_registered)
-        is_in_chat = bool(db_user and db_user.is_in_chat)
+    try:
+        async with container.session() as session:
+            user_repo = container.user_repo_with(session)
+            db_user = await user_repo.get_by_telegram_id(message.from_user.id)
+            locale = getattr(db_user, "language", None) or "fa"
+            is_registered = bool(db_user and db_user.is_registered)
+            is_in_chat = bool(db_user and db_user.is_in_chat)
+    except Exception as exc:
+        _log.exception("start_search.db_failed", error=str(exc))
+        # اگر DB خطا داد، اطلاع بده و state را پاک کن
+        try:
+            await state.clear()
+        except Exception:
+            pass
+        await message.answer(t("error_generic", "fa"))
+        return
 
     if not is_registered:
         # باگ: در مسیر خطا state ممکن بود stale بماند؛ پاک می‌کنیم.
@@ -75,8 +85,8 @@ async def search_by_gender(callback: CallbackQuery, state: FSMContext) -> None:
     finally:
         try:
             await callback.answer()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("callback.answer_failed", error=str(exc))
 
 
 @router.callback_query(SearchStates.choosing_criteria, F.data == "search_country")
@@ -91,8 +101,8 @@ async def search_by_country(callback: CallbackQuery, state: FSMContext) -> None:
     finally:
         try:
             await callback.answer()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("callback.answer_failed", error=str(exc))
 
 
 @router.callback_query(SearchStates.choosing_criteria, F.data == "search_language")
@@ -107,8 +117,8 @@ async def search_by_language(callback: CallbackQuery, state: FSMContext) -> None
     finally:
         try:
             await callback.answer()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("callback.answer_failed", error=str(exc))
 
 
 @router.callback_query(SearchStates.choosing_criteria, F.data == "search_age")
@@ -123,8 +133,8 @@ async def search_by_age(callback: CallbackQuery, state: FSMContext) -> None:
     finally:
         try:
             await callback.answer()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("callback.answer_failed", error=str(exc))
 
 
 @router.message(SearchStates.waiting_gender_pref)
@@ -185,8 +195,12 @@ async def _perform_search(callback: CallbackQuery, state: FSMContext, criteria: 
     # ویرایش پیام قبلی یا ارسال پیام جدید در صورت خطا
     try:
         await callback.message.edit_text(t("search_started", locale))  # type: ignore[attr-defined]
-    except Exception:
-        await callback.message.answer(t("search_started", locale))  # type: ignore[attr-defined]
+    except Exception as exc:
+        _log.exception("search.edit_text_failed", error=str(exc))
+        try:
+            await callback.message.answer(t("search_started", locale))  # type: ignore[attr-defined]
+        except Exception as exc2:
+            _log.exception("search.answer_failed", error=str(exc2))
 
     # matchmaking را در try/finally بپیچ تا callback.answer همیشه صدا زده شود
     try:
@@ -197,8 +211,8 @@ async def _perform_search(callback: CallbackQuery, state: FSMContext, criteria: 
         # می‌کند دکمه کار نمی‌کند.
         try:
             await callback.answer()
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("callback.answer_failed", error=str(exc))
 
 
 async def _perform_search_message(message: Message, state: FSMContext, criteria: SearchCriteriaDTO) -> None:
@@ -235,8 +249,11 @@ async def _do_matchmaking(
         await state.clear()
         return
     except Exception as exc:
-        _log.error("search.failed", user_id=telegram_id, error=str(exc))
-        await message.answer(t("error_generic", locale))
+        _log.exception("search.failed", user_id=telegram_id)
+        try:
+            await message.answer(t("error_generic", locale))
+        except Exception:
+            _log.exception("search.failed_could_not_notify_user", user_id=telegram_id)
         await state.clear()
         return
 
@@ -268,8 +285,8 @@ async def _do_matchmaking(
                 t("search_partner_connected", partner_locale),
                 reply_markup=chat_keyboard(partner_locale),
             )
-        except Exception as exc:
-            _log.error("search.notify_partner_failed", error=str(exc))
+        except Exception:
+            _log.exception("search.notify_partner_failed", user_id=partner_tg_id)
 
     # پاداش XP
     await container.user_service.add_xp(telegram_id, 2)
@@ -296,8 +313,11 @@ async def _do_cancel_search(target_message: Message, telegram_id: int, state: FS
 async def cancel_search_callback(callback: CallbackQuery, state: FSMContext) -> None:
     """لغو جستجو از دکمه‌ی اینلاین."""
     await _do_cancel_search(callback.message, callback.from_user.id, state)  # type: ignore[arg-type]
-    await callback.answer()
+    try:
+        await callback.answer()
+    except Exception as exc:
+        _log.debug("callback.answer_failed", error=str(exc))
 
 
-# نکته: لغو از دکمه‌ی ریپلای کیبورد («❌ لغو») توسط cmd_cancel در start.py
+# نکته: لغو از دکمه‌ی ریپلای کیبورد («❌ لغو") توسط cmd_cancel در start.py
 # هندل می‌شود که آن هم matchmaking_service.cancel_search را صدا می‌زند.
