@@ -247,122 +247,6 @@ async def process_reply(message: Message, state: FSMContext) -> None:
 
 
 # ---------------------------------------------------------------------------
-#  فوروارد پیام ناشناس به کانال/گروه
-# ---------------------------------------------------------------------------
-
-@router.callback_query(F.data.startswith("anon_fwd_"))
-async def start_forward(callback: CallbackQuery, state: FSMContext) -> None:
-    """شروع فوروارد پیام ناشناس — کاربر باید یک پیام از کانال/گروه فوروارد کند.
-
-    فیلتر فقط با ``anon_fwd_`` شروع می‌شود. ``anon_fwd_channel_`` و
-    ``anon_fwd_group_`` با هندلرهای جداگانه (در صورت نیاز) مدیریت می‌شوند.
-    در اینجا فقط ``anon_fwd_{msg_id}`` (بدون channel/group) هندل می‌شود.
-    """
-    # بررسی اینکه channel_ یا group_ نباشد
-    if callback.data and ("anon_fwd_channel_" in callback.data or "anon_fwd_group_" in callback.data):
-        # این callback برای این هندلر نیست — اجازه دهیم به هندلر بعدی برود
-        # ولی در aiogram، وقتی هندلر match شد، نمی‌توان رد کرد. پس return می‌کنیم.
-        try:
-            await callback.answer()
-        except Exception:
-            pass
-        return
-
-    msg_id = _parse_anon_msg_id(callback.data or "")  # type: ignore[arg-type]
-    if msg_id is None:
-        _log.warning("anon.invalid_callback_data", data=callback.data)
-        try:
-            await callback.answer("خطا: داده نامعتبر", show_alert=True)
-        except Exception:
-            pass
-        return
-    container = get_container()
-    async with container.session() as session:
-        user_repo = container.user_repo_with(session)
-        db_user = await user_repo.get_by_telegram_id(callback.from_user.id)
-        locale = getattr(db_user, "language", None) or "fa"
-
-    await state.update_data(anon_fwd_msg_id=msg_id)
-    await state.set_state(AnonymousStates.waiting_forward_target)
-
-    await callback.message.answer(  # type: ignore[attr-defined]
-        t("anon_forward_prompt", locale),
-        reply_markup=cancel_keyboard(locale),
-    )
-    await callback.answer()
-
-
-@router.message(AnonymousStates.waiting_forward_target, F.forward_origin)
-async def process_forward_target(message: Message, state: FSMContext) -> None:
-    """پردازش مقصد فوروارد — کاربر یک پیام از کانال/گروه فوروارد کرده.
-
-    ما از forward_origin برای تشخیص chat_id مقصد استفاده می‌کنیم.
-    سپس پیام ناشناس را به آن چت فوروارد می‌کنیم.
-    """
-    container = get_container()
-    async with container.session() as session:
-        user_repo = container.user_repo_with(session)
-        db_user = await user_repo.get_by_telegram_id(message.from_user.id)
-        locale = getattr(db_user, "language", None) or "fa"
-
-    data = await state.get_data()
-    msg_id = data.get("anon_fwd_msg_id")
-    if msg_id is None:
-        await state.clear()
-        await message.answer(t("error_generic", locale))
-        return
-
-    # تشخیص chat_id مقصد از forward_origin
-    # باگ: در aiogram 3.x نوع forward_origin ممکن است CHANNEL/CHAT/USER باشد.
-    # اگر کاربر پیام فوروارد‌شده از یک کاربر خصوصی بفرستد، نوع MessageOriginUser است
-    # و sender_chat ندارد — باید پیام خطای مناسب نمایش دهیم.
-    target_chat_id = None
-    is_private_user_origin = False
-    if message.forward_origin:
-        from aiogram.enums import MessageOriginType
-        origin = message.forward_origin
-        if origin.type == MessageOriginType.CHANNEL:
-            target_chat_id = origin.chat.id
-        elif origin.type == MessageOriginType.CHAT:
-            target_chat_id = origin.sender_chat.id if origin.sender_chat else None
-        elif origin.type == MessageOriginType.USER:
-            # فوروارد از کاربر خصوصی — chat_id گروه/کانال در دسترس نیست
-            is_private_user_origin = True
-
-    if target_chat_id is None:
-        if is_private_user_origin:
-            await message.answer(
-                "❌ نمی‌توان پیام ناشناس را به یک کاربر خصوصی فوروارد کرد. "
-                "لطفاً یک پیام از کانال یا گروه فوروارد کنید.",
-            )
-        else:
-            await message.answer(
-                "❌ نمی‌توانستم مقصد را تشخیص دهم. یک پیام از کانال/گروه فوروارد کنید.",
-            )
-        return
-
-    # فوروارد پیام ناشناس
-    success = await container.anon_message_service.forward_to_chat(
-        message.bot,  # type: ignore[arg-type]
-        anon_msg_id=msg_id,
-        target_chat_id=target_chat_id,
-    )
-
-    await state.clear()
-
-    if success:
-        await message.answer(
-            t("anon_forward_success", locale),
-            reply_markup=main_menu(locale),
-        )
-    else:
-        await message.answer(
-            t("anon_forward_failed", locale),
-            reply_markup=main_menu(locale),
-        )
-
-
-# ---------------------------------------------------------------------------
 #  علامت‌گذاری به‌عنوان خوانده‌شده
 # ---------------------------------------------------------------------------
 
@@ -446,7 +330,6 @@ async def cancel_anon_callback(callback: CallbackQuery, state: FSMContext) -> No
 
 @router.message(AnonymousStates.composing_message, F.text == "/cancel")
 @router.message(AnonymousStates.replying, F.text == "/cancel")
-@router.message(AnonymousStates.waiting_forward_target, F.text == "/cancel")
 async def cancel_anon_command(message: Message, state: FSMContext) -> None:
     """لغو با دستور /cancel."""
     await state.clear()
