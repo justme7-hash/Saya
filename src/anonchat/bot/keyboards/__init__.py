@@ -259,9 +259,8 @@ def anon_message_keyboard(locale: str = "fa", msg_id: int = 0) -> InlineKeyboard
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="💬 پاسخ", callback_data=f"anon_reply_{msg_id}"),
-                InlineKeyboardButton(text="📤 فوروارد", callback_data=f"anon_fwd_{msg_id}"),
+                InlineKeyboardButton(text="✅ خوانده‌شده", callback_data=f"anon_read_{msg_id}"),
             ],
-            [InlineKeyboardButton(text="✅ خوانده‌شده", callback_data=f"anon_read_{msg_id}")],
         ]
     )
 
@@ -289,16 +288,3 @@ def anon_link_keyboard(locale: str = "fa", link: str = "") -> InlineKeyboardMark
         ])
     buttons.append([InlineKeyboardButton(text="📬 صندوق پیام‌ها", callback_data="anon_inbox")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def anon_forward_target_keyboard(locale: str = "fa", msg_id: int = 0) -> InlineKeyboardMarkup:
-    """کیبورد انتخاب مقصد فوروارد."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="📢 کانال من", callback_data=f"anon_fwd_channel_{msg_id}"),
-                InlineKeyboardButton(text="👥 گروه من", callback_data=f"anon_fwd_group_{msg_id}"),
-            ],
-            [InlineKeyboardButton(text=t("cancel_button", locale), callback_data="anon_cancel")],
-        ]
-    )
