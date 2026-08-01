@@ -63,8 +63,5 @@ class AnonymousStates(StatesGroup):
     replying = State()
     """صاحب لینک در حال پاسخ به پیام ناشناس."""
 
-    waiting_forward_target = State()
-    """صاحب لینک در حال انتخاب مقصد فوروارد."""
-
     viewing_inbox = State()
     """صاحب لینک در حال مشاهده‌ی صندوق پیام‌های ناشناس."""
