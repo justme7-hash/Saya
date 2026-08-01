@@ -203,11 +203,12 @@ class RateLimitMiddleware(BaseMiddleware):
 
 
 class RegistrationCheckMiddleware(BaseMiddleware):
-    """بررسی ثبت‌نام برای دستورهای نیازمند.
+    """بررسی ثبت‌نام و به‌روزرسانی وضعیت آنلاین.
 
-    این میدل‌ور کاربر را از دیتابیس می‌خواند و مقادیر لازم (language, is_registered)
-    را به‌صورت مقادیر اولیه (نه آبجکت SQLAlchemy) به data اضافه می‌کند تا
-    از DetachedInstanceError جلوگیری شود.
+    این میدل‌ور:
+    - کاربر را از دیتابیس می‌خواند و مقادیر لازم را به data اضافه می‌کند
+    - ``is_online`` را روی ``True`` تنظیم می‌کند و ``last_seen`` را آپدیت می‌کند
+      (این مهم است چون الگوریتم جستجو فقط کاربران ``is_online=True`` را پیدا می‌کند)
     """
 
     async def __call__(
@@ -233,6 +234,10 @@ class RegistrationCheckMiddleware(BaseMiddleware):
                 user_language = db_user.language
                 is_registered = db_user.is_registered
                 is_in_chat = db_user.is_in_chat
+                # به‌روزرسانی وضعیت آنلاین و last_seen
+                # این مهم است چون جستجو فقط کاربران is_online=True را پیدا می‌کند
+                await user_repo.set_online(db_user.id, True)
+                await session.commit()
 
         data["user_language"] = user_language or container.settings.default_locale
         data["is_registered"] = is_registered
