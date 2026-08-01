@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -37,12 +38,9 @@ async def admin_stats(callback: CallbackQuery) -> None:
     try:
         stats = await container.admin_service.get_stats_overview()
     except Exception as exc:
-        _log.exception("admin.stats_failed", error=str(exc))
+        _log.error("admin.stats_failed", error=str(exc))
         await callback.message.answer(t("error_generic", "fa"))  # type: ignore[attr-defined]
-        try:
-            await callback.answer()
-        except Exception as exc2:
-            _log.debug("callback.answer_failed", error=str(exc2))
+        await callback.answer()
         return
 
     text = (
@@ -56,10 +54,7 @@ async def admin_stats(callback: CallbackQuery) -> None:
         f"⏱️ میانگین مدت گفتگو: {stats.get('avg_chat_duration_min', 0):.1f} دقیقه\n"
     )
     await callback.message.answer(text)  # type: ignore[attr-defined]
-    try:
-        await callback.answer()
-    except Exception as exc:
-        _log.debug("callback.answer_failed", error=str(exc))
+    await callback.answer()
 
 
 @router.callback_query(F.data == "admin_users")
@@ -72,12 +67,9 @@ async def admin_users(callback: CallbackQuery) -> None:
     try:
         result = await container.admin_service.get_user_list(page=1, per_page=10)
     except Exception as exc:
-        _log.exception("admin.users_failed", error=str(exc))
+        _log.error("admin.users_failed", error=str(exc))
         await callback.message.answer(t("error_generic", "fa"))  # type: ignore[attr-defined]
-        try:
-            await callback.answer()
-        except Exception as exc2:
-            _log.debug("callback.answer_failed", error=str(exc2))
+        await callback.answer()
         return
 
     text = f"👥 مدیریت کاربران (صفحه ۱ از {result['pages']})\n\n"
@@ -87,10 +79,7 @@ async def admin_users(callback: CallbackQuery) -> None:
             f"  سطح {u.level} | {u.total_chats} گفتگو | ریسک: {u.risk_score}\n\n"
         )
     await callback.message.answer(text[:4000])  # type: ignore[attr-defined]
-    try:
-        await callback.answer()
-    except Exception as exc:
-        _log.debug("callback.answer_failed", error=str(exc))
+    await callback.answer()
 
 
 @router.callback_query(F.data == "admin_reports")
@@ -103,30 +92,21 @@ async def admin_reports(callback: CallbackQuery) -> None:
     try:
         reports = await container.admin_service.get_pending_reports(limit=10)
     except Exception as exc:
-        _log.exception("admin.reports_failed", error=str(exc))
+        _log.error("admin.reports_failed", error=str(exc))
         await callback.message.answer(t("error_generic", "fa"))  # type: ignore[attr-defined]
-        try:
-            await callback.answer()
-        except Exception as exc2:
-            _log.debug("callback.answer_failed", error=str(exc2))
+        await callback.answer()
         return
 
     if not reports:
         await callback.message.answer("✅ هیچ گزارش در انتظاری وجود ندارد.")  # type: ignore[attr-defined]
-        try:
-            await callback.answer()
-        except Exception as exc:
-            _log.debug("callback.answer_failed", error=str(exc))
+        await callback.answer()
         return
 
     text = "🚩 گزارش‌های در انتظار\n\n"
     for r in reports:
         text += f"• گزارش #{r.id}\n  دلیل: {r.reason}\n  گزارش‌دهنده: {r.reporter_id}\n\n"
     await callback.message.answer(text[:4000])  # type: ignore[attr-defined]
-    try:
-        await callback.answer()
-    except Exception as exc:
-        _log.debug("callback.answer_failed", error=str(exc))
+    await callback.answer()
 
 
 @router.callback_query(F.data == "admin_ban")
@@ -138,10 +118,7 @@ async def admin_ban_start(callback: CallbackQuery, state: FSMContext) -> None:
         return
     await state.set_state(AdminStates.waiting_ban_input)
     await callback.message.answer(t("admin_ban_prompt", "fa"))  # type: ignore[attr-defined]
-    try:
-        await callback.answer()
-    except Exception as exc:
-        _log.debug("callback.answer_failed", error=str(exc))
+    await callback.answer()
 
 
 @router.message(AdminStates.waiting_ban_input)
@@ -166,7 +143,7 @@ async def admin_ban_process(message: Message, state: FSMContext) -> None:
         await state.clear()
         return
     except Exception as exc:
-        _log.exception("admin.ban_failed", error=str(exc))
+        _log.error("admin.ban_failed", error=str(exc))
         await message.answer(t("error_generic", "fa"))
         await state.clear()
         return
@@ -183,10 +160,7 @@ async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext) -> N
         return
     await state.set_state(AdminStates.waiting_broadcast_text)
     await callback.message.answer(t("admin_broadcast_prompt", "fa"))  # type: ignore[attr-defined]
-    try:
-        await callback.answer()
-    except Exception as exc:
-        _log.debug("callback.answer_failed", error=str(exc))
+    await callback.answer()
 
 
 @router.message(AdminStates.waiting_broadcast_text)
@@ -205,7 +179,7 @@ async def admin_broadcast_process(message: Message, state: FSMContext) -> None:
             message.from_user.id,
         )
     except Exception as exc:
-        _log.exception("admin.broadcast_failed", error=str(exc))
+        _log.error("admin.broadcast_failed", error=str(exc))
         await message.answer(t("error_generic", "fa"))
         await state.clear()
         return
@@ -228,23 +202,17 @@ async def admin_maintenance_toggle(callback: CallbackQuery) -> None:
     try:
         await container.admin_service.set_maintenance(new_state, callback.from_user.id)
     except Exception as exc:
-        _log.exception("admin.maintenance_failed", error=str(exc))
-        try:
-            await callback.answer(t("error_generic", "fa"))
-        except Exception as exc2:
-            _log.debug("callback.answer_failed", error=str(exc2))
+        _log.error("admin.maintenance_failed", error=str(exc))
+        await callback.answer(t("error_generic", "fa"))
         return
     # آپدیت تنظیمات در حافظه
     container.settings.maintenance_mode = new_state
     msg = t("admin_maintenance_on", "fa") if new_state else t("admin_maintenance_off", "fa")
     await callback.message.answer(msg)  # type: ignore[attr-defined]
-    try:
-        await callback.answer()
-    except Exception as exc:
-        _log.debug("callback.answer_failed", error=str(exc))
+    await callback.answer()
 
 
-@router.message(F.text == "/unban")
+@router.message(Command("unban"))
 async def admin_unban(message: Message) -> None:
     """لغو بن با فرمت: /unban TELEGRAM_ID"""
     container = get_container()
@@ -262,7 +230,7 @@ async def admin_unban(message: Message) -> None:
         await message.answer(t("admin_user_not_found", "fa"))
         return
     except Exception as exc:
-        _log.exception("admin.unban_failed", error=str(exc))
+        _log.error("admin.unban_failed", error=str(exc))
         await message.answer(t("error_generic", "fa"))
         return
     if result:
