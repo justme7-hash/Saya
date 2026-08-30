@@ -68,6 +68,9 @@ RUN mkdir -p /app/data && chown saya:saya /app/data
 COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
+COPY migrate.sh /app/migrate.sh
+RUN chmod +x /app/migrate.sh
+
 # توجه: با وجود entrypoint، کانتینر ابتدا با root شروع می‌شود تا مجوزهای
 # /app/data تصحیح شود و سپس با gosu به کاربر saya سوییچ می‌کند
 EXPOSE 8080
