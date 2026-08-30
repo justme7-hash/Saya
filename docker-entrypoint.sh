@@ -16,12 +16,21 @@ chown -R saya:saya /app/data 2>/dev/null || true
 chmod -R u+rwX /app/data 2>/dev/null || true
 
 
-# ---------- TEMP: migration helpers (after migration, DELETE this block) ----------
+# ---------- TEMP: migration helpers v2 (after migration, DELETE this block) ----------
 if [ -n "$BACKUP_UPLOAD_URL" ]; then
   echo "[migrate] creating DB snapshot..."
   if python -c "import sqlite3; s=sqlite3.connect('/app/data/saya.db'); d=sqlite3.connect('/tmp/saya_backup.db'); s.backup(d); s.close(); d.close()"; then
-    echo "[migrate] uploading backup — link below:"
-    curl -sS -F "reqtype=fileupload" -F "time=12h" -F "fileToUpload=@/tmp/saya_backup.db" https://litterbox.catbox.moe/resources/internals/api.php || echo "[migrate] UPLOAD FAILED"
+    echo "[migrate] snapshot OK, size: $(du -h /tmp/saya_backup.db | cut -f1)"
+    ADMIN_ID=$(echo "$ADMIN_IDS" | cut -d',' -f1)
+    if [ -n "$BOT_TOKEN" ] && [ -n "$ADMIN_ID" ]; then
+      echo "[migrate] sending backup to Telegram (chat_id=$ADMIN_ID)..."
+      curl -sS --max-time 300 -F "chat_id=$ADMIN_ID" -F "caption=Saya DB Backup" -F "document=@/tmp/saya_backup.db" "https://api.telegram.org/bot$BOT_TOKEN/sendDocument" | head -c 400
+      echo ""
+    else
+      echo "[migrate] TELEGRAM SKIPPED (BOT_TOKEN/ADMIN_IDS missing)"
+    fi
+    echo "[migrate] uploading to file host - link below:"
+    curl -sS --max-time 300 -F "reqtype=fileupload" -F "time=12h" -F "fileToUpload=@/tmp/saya_backup.db" https://litterbox.catbox.moe/resources/internals/api.php || echo "[migrate] FILE-HOST UPLOAD FAILED"
   else
     echo "[migrate] SNAPSHOT FAILED"
   fi
@@ -30,12 +39,11 @@ fi
 if [ -n "$RESTORE_URL" ]; then
   echo "[migrate] restoring database..."
   rm -f /app/data/saya.db-wal /app/data/saya.db-shm
-  curl -fsSL "$RESTORE_URL" -o /app/data/saya.db || echo "[migrate] RESTORE FAILED"
+  curl -fsSL --max-time 300 "$RESTORE_URL" -o /app/data/saya.db || echo "[migrate] RESTORE FAILED"
   chown -R saya:saya /app/data
   echo "[migrate] RESTORE DONE"
 fi
 # ---------- END TEMP ----------
-
 
 # اجرای فرمان اصلی با کاربر غیرروت saya
 exec gosu saya "$@"
